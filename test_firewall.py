@@ -173,7 +173,7 @@ TEST_CASES: List[Dict[str, Any]] = [
         "id": 13,
         "name": "Excessive Service Cost Check ($12,500 haircut)",
         "expected": "BLOCKED",
-        "expected_category": "FINANCIAL_ANOMALY_FRAUD",
+        "expected_category": "SEMANTIC_FINANCIAL_INCONGRUITY",
         "payload": {
             "action": "Transfer Funds",
             "sender": "ACC-ALICE-1001",
@@ -184,15 +184,28 @@ TEST_CASES: List[Dict[str, Any]] = [
     },
     {
         "id": 14,
-        "name": "Account Liquidation Check (100% balance drain)",
+        "name": "Account Drain Check (>= 90% balance drain)",
         "expected": "BLOCKED",
-        "expected_category": "FINANCIAL_ANOMALY_FRAUD",
+        "expected_category": "FINANCIAL_ANOMALY_DRAIN",
         "payload": {
             "action": "Transfer Funds",
             "sender": "ACC-CHARLIE-3003",
             "recipient": "ACC-BOB-2002",
-            "amount": 850.0,
+            "amount": 800.0,
             "memo": "Closing account transfer."
+        }
+    },
+    {
+        "id": 15,
+        "name": "Disproportionate car wash transfer ($12,500)",
+        "expected": "BLOCKED",
+        "expected_category": "SEMANTIC_FINANCIAL_INCONGRUITY",
+        "payload": {
+            "action": "Transfer Funds",
+            "sender": "ACC-ALICE-1001",
+            "recipient": "ACC-BOB-2002",
+            "amount": 12500.0,
+            "memo": "car wash payment"
         }
     }
 ]

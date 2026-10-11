@@ -18,7 +18,7 @@ class FirewallDecision(BaseModel):
     status: str = Field(description="Verdict: 'APPROVED' or 'BLOCKED'")
     risk_score: float = Field(description="Risk assessment score between 0.0 (safe) and 1.0 (critical threat)")
     threat_category: str = Field(
-        description="Threat taxonomy: 'NONE', 'DIRECT_INJECTION', 'INDIRECT_INJECTION', 'ROLEPLAY_JAILBREAK', 'DATA_EXFILTRATION', 'FINANCIAL_FRAUD', 'FINANCIAL_ANOMALY_FRAUD', 'SEMANTIC_FINANCIAL_INCONGRUITY', 'DELIMITER_HIJACK', or 'MALICIOUS_LOGIC'"
+        description="Threat taxonomy: 'NONE', 'DIRECT_INJECTION', 'INDIRECT_INJECTION', 'ROLEPLAY_JAILBREAK', 'DATA_EXFILTRATION', 'FINANCIAL_FRAUD', 'FINANCIAL_ANOMALY_FRAUD', 'FINANCIAL_ANOMALY_DRAIN', 'SEMANTIC_FINANCIAL_INCONGRUITY', 'DELIMITER_HIJACK', or 'MALICIOUS_LOGIC'"
     )
     explanation: str = Field(description="Blue-team analytical rationale explaining why this input was approved or blocked")
     sanitized_input: Optional[str] = Field(default=None, description="Cleaned, defanged version of memo or prompt text if sanitized")
@@ -56,11 +56,45 @@ REGEX_THREAT_PATTERNS = [
     (r"(?i)(union\s+select|drop\s+table|insert\s+into)", "MALICIOUS_LOGIC", "SQL injection pattern in financial memo"),
 ]
 
-def inspect_layer0(text: str) -> Optional[FirewallDecision]:
+def inspect_layer0(
+    text: str,
+    amount: float = 0.0,
+    current_balance: Optional[float] = None,
+    memo: str = ""
+) -> Optional[FirewallDecision]:
     """
     Layer 0: Sub-millisecond deterministic check.
-    Catches overt prompt injections, delimiters, roleplay, and forbidden keywords without LLM cost.
+    Catches overt prompt injections, delimiters, roleplay, excessive retail service costs,
+    and high-volume account draining without LLM cost.
     """
+    memo_text = memo or text
+    memo_lower = memo_text.lower()
+
+    # 1. Deterministic Semantic Retail Plausibility Guard
+    if amount > 500.0:
+        for term in RETAIL_SERVICE_TERMS:
+            if re.search(r"\b" + re.escape(term) + r"\b", memo_lower):
+                return FirewallDecision(
+                    status="BLOCKED",
+                    risk_score=0.95,
+                    threat_category="SEMANTIC_FINANCIAL_INCONGRUITY",
+                    explanation=f"Blocked by Blue-Team Semantic Guard: Disproportionate transaction amount (${amount:,.2f}) for everyday service memo ('{memo_text}'). High fraud/scam risk regardless of recipient.",
+                    sanitized_input="[REDACTED_RETAIL_ANOMALY]",
+                    detected_patterns=["DISPROPORTIONATE_RETAIL_AMOUNT"]
+                )
+
+    # 2. Deterministic Account Drainage Guard (>= 90% balance)
+    if current_balance is not None and current_balance > 0 and amount >= (0.90 * current_balance):
+        return FirewallDecision(
+            status="BLOCKED",
+            risk_score=0.92,
+            threat_category="FINANCIAL_ANOMALY_DRAIN",
+            explanation=f"Anti-Draining Guard: High-volume account drainage detected. Transfer amount (${amount:,.2f}) represents {(amount / current_balance) * 100:.1f}% (>=90%) of source account balance.",
+            sanitized_input="[REDACTED_ACCOUNT_DRAIN]",
+            detected_patterns=["ACCOUNT_DRAIN_TRIGGER"]
+        )
+
+    # 3. Overt Regex Threat Patterns
     matched_reasons = []
     category = "NONE"
     
@@ -110,10 +144,11 @@ Security Guidelines:
 # Blacklisted / sanctioned account patterns
 BLACKLISTED_ACCOUNT_KEYWORDS = ["ATTACKER", "HACK", "FRAUD", "ACC-ATTACKER-666"]
 
-# Everyday retail / service items that should not have disproportionately large amounts
-RETAIL_SERVICE_KEYWORDS = [
-    'haircut', 'coffee', 'pizza', 'lunch', 'dinner', 'groceries', 'tip'
-]
+# Everyday retail / personal service terms for plausibility checks
+RETAIL_SERVICE_TERMS = {
+    "car wash", "haircut", "coffee", "pizza", "lunch", "dinner",
+    "groceries", "salon", "tip", "massage", "laundry"
+}
 
 def check_financial_sanctions(
     sender: str,
@@ -125,7 +160,7 @@ def check_financial_sanctions(
     """
     Financial Sanctions, Fraud & Plausibility Layer (Layer 0):
     Deterministic pre-flight check blocking blacklisted accounts, unbacked overdrafts,
-    disproportionate retail service costs, and account liquidation attempts.
+    disproportionate retail service costs, and account drain attempts.
     """
     memo_lower = (memo or "").lower()
 
@@ -161,28 +196,28 @@ def check_financial_sanctions(
             detected_patterns=["EXCESSIVE_WITHDRAWAL_OVERDRAFT"]
         )
 
-    # 3. Excessive Service Cost Check (Retail Anomaly)
+    # 3. Excessive Service Cost Check (Semantic Retail Plausibility Guard)
     if amount > 500.0:
-        for retail_kw in RETAIL_SERVICE_KEYWORDS:
-            if re.search(r"\b" + re.escape(retail_kw) + r"\b", memo_lower):
+        for term in RETAIL_SERVICE_TERMS:
+            if re.search(r"\b" + re.escape(term) + r"\b", memo_lower):
                 return FirewallDecision(
                     status="BLOCKED",
                     risk_score=0.95,
-                    threat_category="FINANCIAL_ANOMALY_FRAUD",
-                    explanation=f"Blocked by Blue-Team Semantic Guard: Disproportionate transaction amount (${amount:,.2f}) for retail memo description ('{retail_kw}'). High fraud probability.",
+                    threat_category="SEMANTIC_FINANCIAL_INCONGRUITY",
+                    explanation=f"Blocked by Blue-Team Semantic Guard: Disproportionate transaction amount (${amount:,.2f}) for everyday service memo ('{memo}'). High fraud/scam risk regardless of recipient.",
                     sanitized_input="[REDACTED_RETAIL_ANOMALY]",
                     detected_patterns=["DISPROPORTIONATE_RETAIL_AMOUNT"]
                 )
 
-    # 4. Account Liquidation Check (100% of balance drained)
-    if current_balance is not None and current_balance > 0 and amount == current_balance:
+    # 4. Account Drain Check (>= 90% of account balance drained)
+    if current_balance is not None and current_balance > 0 and amount >= (0.90 * current_balance):
         return FirewallDecision(
             status="BLOCKED",
-            risk_score=0.88,
-            threat_category="FINANCIAL_ANOMALY_FRAUD",
-            explanation=f"Anti-Draining Guard: Full account liquidation detected. Transfer amount (${amount:,.2f}) equals 100% of source account balance.",
-            sanitized_input="[REDACTED_ACCOUNT_LIQUIDATION]",
-            detected_patterns=["ACCOUNT_LIQUIDATION_DRAIN"]
+            risk_score=0.92,
+            threat_category="FINANCIAL_ANOMALY_DRAIN",
+            explanation=f"Anti-Draining Guard: High-volume account drainage detected. Transfer amount (${amount:,.2f}) represents {(amount / current_balance) * 100:.1f}% (>=90%) of source account balance.",
+            sanitized_input="[REDACTED_ACCOUNT_DRAIN]",
+            detected_patterns=["ACCOUNT_DRAIN_TRIGGER"]
         )
 
     return None
@@ -200,13 +235,13 @@ def inspect_layer1_gemini(transaction_data: Dict[str, Any], api_key: str, model_
     def heuristic_eval(note_prefix: str = "") -> FirewallDecision:
         # Threat 0: Excessive Service Cost Check in fallback/simulation
         if amount_val > 500.0:
-            for retail_kw in RETAIL_SERVICE_KEYWORDS:
-                if re.search(r"\b" + re.escape(retail_kw) + r"\b", memo_text.lower()):
+            for term in RETAIL_SERVICE_TERMS:
+                if re.search(r"\b" + re.escape(term) + r"\b", memo_text.lower()):
                     return FirewallDecision(
                         status="BLOCKED",
                         risk_score=0.95,
-                        threat_category="FINANCIAL_ANOMALY_FRAUD",
-                        explanation=f"Blocked by Blue-Team Semantic Guard: Disproportionate transaction amount (${amount_val:,.2f}) for retail memo description ('{retail_kw}'). High fraud probability.",
+                        threat_category="SEMANTIC_FINANCIAL_INCONGRUITY",
+                        explanation=f"Blocked by Blue-Team Semantic Guard: Disproportionate transaction amount (${amount_val:,.2f}) for everyday service memo ('{memo_text}'). High fraud/scam risk regardless of recipient.",
                         sanitized_input="[REDACTED_RETAIL_ANOMALY]",
                         detected_patterns=["DISPROPORTIONATE_RETAIL_AMOUNT"]
                     )
@@ -348,8 +383,8 @@ def inspect_transaction(transaction_data: Dict[str, Any], api_key: str = "", mod
         if sanction_verdict:
             return sanction_verdict
 
-    # Layer 0: Regex Heuristics on memo & combined input
-    l0_verdict = inspect_layer0(f"{action} {memo}")
+    # Layer 0: Deterministic Regex & Semantic Retail/Drain Heuristics
+    l0_verdict = inspect_layer0(f"{action} {memo}", amount=amount, current_balance=current_balance, memo=memo)
     if l0_verdict:
         return l0_verdict
 
@@ -626,9 +661,9 @@ def main():
                     st.write(f"**Identified Patterns:** `{', '.join(sanction_verdict.detected_patterns)}`")
                     st.info("⏭️ Execution short-circuited: Blocked at Sanctions Policy layer.")
                 else:
-                    # STEP 1: Layer 0 Regex Inspection
+                    # STEP 1: Layer 0 Regex & Plausibility Filter
                     st.markdown("#### **Layer 0: Regex & Heuristics Filter**")
-                    layer0_verdict = inspect_layer0(f"{action} {memo}")
+                    layer0_verdict = inspect_layer0(f"{action} {memo}", amount=amount, current_balance=sender_bal, memo=memo)
 
                     if layer0_verdict:
                         final_verdict = layer0_verdict

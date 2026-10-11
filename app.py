@@ -26,6 +26,63 @@ class FirewallDecision(BaseModel):
 
 
 # ==========================================
+# 1.1 Input Bounds Validation & Sanitization
+# ==========================================
+ZERO_WIDTH_AND_BIDI_REGEX = re.compile(r"[\u200B-\u200D\uFEFF\u200E\u200F\u202A-\u202E\u2066-\u2069]")
+
+def validate_and_sanitize_input(
+    action: str,
+    amount: float,
+    memo: str
+) -> tuple[Optional[FirewallDecision], str]:
+    """
+    Validates structural bounds on untrusted input and strips adversarial invisible Unicode.
+
+    Parameters:
+        action (str): The requested banking action (e.g. 'Transfer Funds' or 'Check Balance').
+        amount (float): Transaction amount in USD.
+        memo (str): Raw untrusted transaction memo / note text.
+
+    Returns:
+        tuple[Optional[FirewallDecision], str]: A tuple containing a FirewallDecision if bounds are violated,
+        and the sanitized clean memo string.
+    """
+    # 1. Sanitize invisible characters & zero-width / bidi override markers
+    clean_memo = ZERO_WIDTH_AND_BIDI_REGEX.sub("", memo or "").strip()
+
+    # 2. Enforce length bounds on memo
+    if len(clean_memo) > 500:
+        return (
+            FirewallDecision(
+                status="BLOCKED",
+                risk_score=0.95,
+                threat_category="MALICIOUS_LOGIC",
+                explanation=f"Input Bounds Violation: Transaction memo length ({len(clean_memo)} characters) exceeds 500 character maximum limit.",
+                sanitized_input=clean_memo[:500],
+                detected_patterns=["INPUT_BOUNDS_MEMO_OVERFLOW"]
+            ),
+            clean_memo[:500]
+        )
+
+    # 3. Enforce transfer amount bounds (0.01 <= amount <= 1,000,000.00)
+    if action == "Transfer Funds":
+        if amount < 0.01 or amount > 1000000.00:
+            return (
+                FirewallDecision(
+                    status="BLOCKED",
+                    risk_score=0.98,
+                    threat_category="FINANCIAL_FRAUD",
+                    explanation=f"Input Bounds Violation: Transfer amount (${amount:,.2f}) must be strictly between $0.01 and $1,000,000.00.",
+                    sanitized_input=clean_memo,
+                    detected_patterns=["INPUT_BOUNDS_INVALID_AMOUNT"]
+                ),
+                clean_memo
+            )
+
+    return (None, clean_memo)
+
+
+# ==========================================
 # 2. Layer 0: Deterministic Regex & Sanctions Heuristics
 # ==========================================
 REGEX_THREAT_PATTERNS = [
@@ -365,11 +422,16 @@ def inspect_transaction(transaction_data: Dict[str, Any], api_key: str = "", mod
     2. Layer 0 Deterministic Regex Heuristics
     3. Layer 1 Semantic Inspection (Gemini / Heuristic Engine)
     """
-    action = transaction_data.get("action", "")
-    sender = transaction_data.get("sender", "")
-    recipient = transaction_data.get("recipient", "")
+    action = str(transaction_data.get("action", ""))
+    sender = str(transaction_data.get("sender", ""))
+    recipient = str(transaction_data.get("recipient", ""))
     amount = float(transaction_data.get("amount", 0.0))
-    memo = transaction_data.get("memo", "")
+    raw_memo = str(transaction_data.get("memo", ""))
+
+    # STEP 0.0: Input Bounds Validation & Zero-Width Sanitization
+    bounds_verdict, memo = validate_and_sanitize_input(action, amount, raw_memo)
+    if bounds_verdict:
+        return bounds_verdict
 
     # Pre-Flight: Check Financial Sanctions & Overdraft Balance
     current_balance = None
@@ -738,14 +800,23 @@ def main():
                     "timestamp": datetime.now().isoformat()
                 }
 
-                # STEP 0: Financial Sanctions & Fraud Pre-Check
+                # STEP -1: Input Bounds Validation & Zero-Width Sanitization
+                bounds_verdict, sanitized_memo = validate_and_sanitize_input(action, amount, memo)
+                memo = sanitized_memo
+
                 sender_bal = st.session_state.accounts.get(sender)
                 sanction_verdict = check_financial_sanctions(sender, recipient, amount, sender_bal, memo=memo) if action == "Transfer Funds" else None
 
                 final_verdict: FirewallDecision
                 defending_layer = "Layer 1 (Gemini)"
 
-                if sanction_verdict:
+                if bounds_verdict:
+                    final_verdict = bounds_verdict
+                    defending_layer = "Layer 0 (Input Bounds & Sanitization Guard)"
+                    st.error(f"VERDICT: [BLOCKED] - INPUT BOUNDS POLICY VIOLATION\n\n{bounds_verdict.explanation}")
+                    st.write(f"**Identified Forensic Signatures:** `{', '.join(bounds_verdict.detected_patterns)}`")
+                    st.info("⏭️ Execution Short-Circuited: Immediate structural bounds block. Skipped subsequent evaluations.")
+                elif sanction_verdict:
                     final_verdict = sanction_verdict
                     defending_layer = "Layer 0 (Sanctions & Fraud Guard)"
                     st.error(f"VERDICT: [BLOCKED] - FINANCIAL SANCTIONS / FRAUD POLICY VIOLATION\n\n{sanction_verdict.explanation}")

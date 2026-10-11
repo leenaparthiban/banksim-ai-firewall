@@ -210,7 +210,16 @@ TEST_CASES: List[Dict[str, Any]] = [
     }
 ]
 
-def run_test_suite():
+def run_test_suite() -> int:
+    """
+    Executes the automated adversarial test suite against BankSim's multi-tier firewall.
+
+    Iterates over all defined test cases, evaluates them through the complete
+    defensive pipeline, asserts expected security verdicts, and returns an exit code.
+
+    Returns:
+        int: 0 if all test cases produce expected verdicts; 1 if any test fails.
+    """
     print("=" * 78)
     print("  BankSim Blue-Team AI Firewall: Automated Security Test Suite")
     print("=" * 78)

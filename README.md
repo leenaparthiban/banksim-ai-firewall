@@ -172,3 +172,15 @@ banksim-ai-firewall/
 2. **Fail-Closed Fallback Engine**: If the external Gemini API is unreachable, rate-limited, or out of quota, the local heuristic engine cleanly grades the input without throwing unhandled exceptions or failing open.
 3. **Structured Telemetry (Pydantic Validation)**: Firewall decisions strictly enforce typed JSON outputs (`status`, `risk_score`, `threat_category`, `explanation`), preventing hallucinated or malformed verdicts from bypassing guards.
 4. **Defense-in-Depth Cost Optimization**: Fast deterministic checks (Layer 0) terminate overt attacks in $<1\text{ ms}$, saving token costs and reserving LLM evaluation (Layer 1) for nuanced contextual inputs.
+
+---
+
+## ♿ Accessibility & Inclusive Usability (WCAG 2.1 AA Conformance)
+
+BankSim is built in adherence to the **Web Content Accessibility Guidelines (WCAG) 2.1 Level AA** standards to ensure that mission-critical security telemetry and AI guardrail management are accessible to all operators, including users of screen readers, keyboard-only navigation, and adaptive visual aids.
+
+- **WCAG 2.1 AA Conformance**: All typography, metric banners, audit dataframes, and telemetry cards maintain high-contrast ratios exceeding **4.5:1** against backgrounds (with key headers achieving enhanced AAA contrast $> 7:1$).
+- **Non-Color-Dependent Signaling**: Security statuses are never communicated via color alone. Every firewall verdict explicitly pairs visual badges with textual tags (`VERDICT: [BLOCKED] - CRITICAL RISK`, `VERDICT: [APPROVED] - VERIFIED BENIGN`), distinct iconography (`❌`, `✅`), numerical confidence risk scores (`0.00` to `1.00`), and defending layer identifiers.
+- **Keyboard Operable Navigation**: Complete end-to-end functionality—including preset selection, manual form entry, slider sensitivity adjustments, tab switching, and ledger reset actions—is operable via standard keyboard sequences (`Tab`, `Shift+Tab`, `Arrow keys`, `Space`, `Enter`) with clear focus rings and zero keyboard traps.
+- **Screen Reader Optimization**: Form controls are explicitly bound to programmatic `<label>` elements and descriptive `help` tooltip tooltips. Headings follow strict semantic hierarchy (`H1`, `H2`, `H3`) to construct an orderly accessibility tree, and all architectural diagrams are accompanied by comprehensive text alternatives.
+- **Cognitive Accessibility**: Threat categories and risk rationales are articulated in plain, non-jargon language alongside raw JSON telemetry, empowering compliance and risk analysts to understand firewall decisions without parsing obscure machine codes.

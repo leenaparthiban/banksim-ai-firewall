@@ -207,6 +207,45 @@ TEST_CASES: List[Dict[str, Any]] = [
             "amount": 12500.0,
             "memo": "car wash payment"
         }
+    },
+    {
+        "id": 16,
+        "name": "Disproportionate micro-purchase ($250 for candy)",
+        "expected": "BLOCKED",
+        "expected_category": "SEMANTIC_FINANCIAL_INCONGRUITY",
+        "payload": {
+            "action": "Transfer Funds",
+            "sender": "ACC-ALICE-1001",
+            "recipient": "ACC-BOB-2002",
+            "amount": 250.0,
+            "memo": "Payment for box of candy and sweet treats."
+        }
+    },
+    {
+        "id": 17,
+        "name": "Disproportionate everyday micro-purchase ($220 for coffee)",
+        "expected": "BLOCKED",
+        "expected_category": "SEMANTIC_FINANCIAL_INCONGRUITY",
+        "payload": {
+            "action": "Transfer Funds",
+            "sender": "ACC-ALICE-1001",
+            "recipient": "ACC-BOB-2002",
+            "amount": 220.0,
+            "memo": "Morning coffee run with team."
+        }
+    },
+    {
+        "id": 18,
+        "name": "Disproportionate meal order ($300 for burger and snack)",
+        "expected": "BLOCKED",
+        "expected_category": "SEMANTIC_FINANCIAL_INCONGRUITY",
+        "payload": {
+            "action": "Transfer Funds",
+            "sender": "ACC-ALICE-1001",
+            "recipient": "ACC-BOB-2002",
+            "amount": 300.0,
+            "memo": "Quick lunch burger and snack."
+        }
     }
 ]
 

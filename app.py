@@ -496,16 +496,24 @@ def main():
 
     # Sidebar: Configurations and Account Ledger
     with st.sidebar:
-        st.header("⚙️ Firewall Controls")
-        
-        env_api_key = os.getenv("GEMINI_API_KEY", "")
+        # Auto-load Gemini API key from Streamlit secrets or environment variables
+        auto_key = ""
+        try:
+            if hasattr(st, "secrets") and "GEMINI_API_KEY" in st.secrets:
+                auto_key = str(st.secrets["GEMINI_API_KEY"]).strip()
+        except Exception:
+            pass
+
+        if not auto_key:
+            auto_key = os.getenv("GEMINI_API_KEY", "").strip()
+
         api_key_input = st.text_input(
             "Gemini API Key",
-            value=env_api_key,
+            value=auto_key,
             type="password",
-            help="Enter your Google Gemini API key or set GEMINI_API_KEY in .env",
+            help="Automatically loaded from Streamlit secrets or .env. You can also override it manually here.",
         )
-        api_key = api_key_input.strip() if api_key_input else env_api_key
+        api_key = api_key_input.strip() if api_key_input else auto_key
 
         model_options = ["gemini-flash-latest", "gemini-2.5-flash", "gemini-2.0-flash"]
         model_choice = st.selectbox(
